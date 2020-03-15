@@ -22,6 +22,7 @@ import (
 	"strings"
 
 	"github.com/tektoncd/pipeline/pkg/apis/pipeline"
+	"github.com/tektoncd/pipeline/pkg/apis/pipeline/v1alpha1"
 	corev1 "k8s.io/api/core/v1"
 )
 
@@ -31,7 +32,7 @@ import (
 //
 // If no such directories need to be created (i.e., no relative workingDirs
 // are specified), this method returns nil, as no init container is necessary.
-func workingDirInit(shellImage string, stepContainers []corev1.Container) *corev1.Container {
+func workingDirInit(shellImage string, stepContainers []v1alpha1.Step) *corev1.Container {
 	// Gather all unique workingDirs.
 	workingDirs := map[string]struct{}{}
 	for _, step := range stepContainers {

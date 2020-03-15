@@ -48,7 +48,7 @@ spec:
           "-creds-image", "ko://github.com/tektoncd/pipeline/cmd/creds-init",
           "-git-image", "ko://github.com/tektoncd/pipeline/cmd/git-init",
           "-nop-image", "tianon/true",
-          "-shell-image", "busybox",
+          "-shell-image", "192.168.1.4:5000/libary/busybox",
           "-gsutil-image", "google/cloud-sdk",
           "-entrypoint-image", "ko://github.com/tektoncd/pipeline/cmd/entrypoint",
           "-imagedigest-exporter-image", "ko://github.com/tektoncd/pipeline/cmd/imagedigestexporter",

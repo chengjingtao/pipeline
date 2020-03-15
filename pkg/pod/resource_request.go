@@ -17,6 +17,7 @@ limitations under the License.
 package pod
 
 import (
+	"github.com/tektoncd/pipeline/pkg/apis/pipeline/v1alpha1"
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/resource"
 )
@@ -32,7 +33,7 @@ func allZeroQty() corev1.ResourceList {
 	}
 }
 
-func resolveResourceRequests(containers []corev1.Container, limitRangeMin corev1.ResourceList) []corev1.Container {
+func resolveResourceRequests(containers []v1alpha1.Step, limitRangeMin corev1.ResourceList) []v1alpha1.Step {
 	max := allZeroQty()
 	resourceNames := []corev1.ResourceName{corev1.ResourceCPU, corev1.ResourceMemory, corev1.ResourceEphemeralStorage}
 	maxIndicesByResource := make(map[corev1.ResourceName]int, len(resourceNames))

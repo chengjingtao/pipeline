@@ -51,6 +51,9 @@ const (
 	// ReasonTimedOut indicates that the TaskRun has taken longer than its configured timeout
 	ReasonTimedOut = "TaskRunTimeout"
 
+	// ReasonStepTimedOut indicates that the TaskStep has taken longer than its configured timeout
+	ReasonStepTimedOut = "TaskStepTimeout"
+
 	// ReasonExceededResourceQuota indicates that the TaskRun failed to create a pod due to
 	// a ResourceQuota in the namespace
 	ReasonExceededResourceQuota = "ExceededResourceQuota"
@@ -117,17 +120,11 @@ func MakeTaskRunStatus(logger *zap.SugaredLogger, tr v1alpha1.TaskRun, pod *core
 
 	for _, s := range pod.Status.ContainerStatuses {
 		if IsContainerStep(s.Name) {
-			if s.State.Terminated != nil && len(s.State.Terminated.Message) != 0 {
-				if err := updateStatusStartTime(&s); err != nil {
-					logger.Errorf("error setting the start time of step %q in taskrun %q: %w", s.Name, tr.Name, err)
-				}
+			stepState, err := convertStepState(logger, s)
+			if err != nil {
+				continue
 			}
-			trs.Steps = append(trs.Steps, v1alpha1.StepState{
-				ContainerState: *s.State.DeepCopy(),
-				Name:           trimStepPrefix(s.Name),
-				ContainerName:  s.Name,
-				ImageID:        s.ImageID,
-			})
+			trs.Steps = append(trs.Steps, stepState)
 		} else if isContainerSidecar(s.Name) {
 			trs.Sidecars = append(trs.Sidecars, v1alpha1.SidecarState{
 				ContainerState: *s.State.DeepCopy(),
@@ -153,34 +150,57 @@ func MakeTaskRunStatus(logger *zap.SugaredLogger, tr v1alpha1.TaskRun, pod *core
 	return *trs
 }
 
-// updateStatusStartTime searches for a result called "StartedAt" in the JSON-formatted termination message
-// of a step and sets the State.Terminated.StartedAt field to this time if it's found. The "StartedAt" result
-// is also removed from the list of results in the container status.
-func updateStatusStartTime(s *corev1.ContainerStatus) error {
-	r, err := termination.ParseMessage(s.State.Terminated.Message)
-	if err != nil {
-		return fmt.Errorf("termination message could not be parsed as JSON: %w", err)
-	}
-	for index, result := range r {
-		if result.Key == "StartedAt" {
+// convertStepState will convert corev1.ContainerStatus to v1alpha1.StepState
+//  according message of ContainerStatus.State.Terminated.Message
+//  it returns error only when parsing `Message` error.
+func convertStepState(logger *zap.SugaredLogger, s corev1.ContainerStatus) (v1alpha1.StepState, error) {
+
+	if s.State.Terminated != nil && len(s.State.Terminated.Message) != 0 {
+		msg := s.State.Terminated.Message
+		r, err := termination.ParseMessage(msg)
+		if err != nil {
+			logger.Errorf("Could not parse json message %q because of %w", msg, err)
+			return v1alpha1.StepState{}, err
+		}
+
+		resultMap := make(map[string]v1alpha1.PipelineResourceResult, len(r))
+		for _, result := range r {
+			resultMap[result.Key] = result
+		}
+
+		if result, ok := resultMap["StartedAt"]; ok {
 			t, err := time.Parse(time.RFC3339, result.Value)
 			if err != nil {
-				return fmt.Errorf("could not parse time value %q in StartedAt field: %w", result.Value, err)
+				logger.Errorf("could not parse time value %q in StartedAt field: %w", result.Value, err)
 			}
+
 			s.State.Terminated.StartedAt = metav1.NewTime(t)
-			// remove the entry for the starting time
-			r = append(r[:index], r[index+1:]...)
-			if len(r) == 0 {
+		}
+
+		if result, ok := resultMap["Reason"]; ok {
+			s.State.Terminated.Reason = result.Value
+		}
+
+		if msg, ok := resultMap["Message"]; ok {
+			s.State.Terminated.Message = msg.Value
+		} else {
+			delete(resultMap, "StartedAt")
+			if len(resultMap) == 0 {
 				s.State.Terminated.Message = ""
-			} else if bytes, err := json.Marshal(r); err != nil {
-				return fmt.Errorf("error marshalling remaining results back into termination message: %w", err)
+			} else if bytes, err := json.Marshal(resultMap); err != nil {
+				logger.Errorf("error marshalling remaining results back into termination message: %w", err)
 			} else {
 				s.State.Terminated.Message = string(bytes)
 			}
-			break
 		}
 	}
-	return nil
+
+	return v1alpha1.StepState{
+		ContainerState: *s.State.DeepCopy(),
+		Name:           trimStepPrefix(s.Name),
+		ContainerName:  s.Name,
+		ImageID:        s.ImageID,
+	}, nil
 }
 
 func updateCompletedTaskRun(trs *v1alpha1.TaskRunStatus, pod *corev1.Pod) {

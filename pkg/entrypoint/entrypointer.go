@@ -17,11 +17,15 @@ limitations under the License.
 package entrypoint
 
 import (
+	"context"
 	"fmt"
 	"io/ioutil"
 	"os"
 	"path/filepath"
 	"time"
+
+	"github.com/tektoncd/pipeline/pkg/apis/config"
+	"github.com/tektoncd/pipeline/pkg/pod"
 
 	"github.com/tektoncd/pipeline/pkg/apis/pipeline"
 	"github.com/tektoncd/pipeline/pkg/apis/pipeline/v1alpha1"
@@ -58,6 +62,9 @@ type Entrypointer struct {
 
 	// Results is the set of files that might contain task results
 	Results []string
+
+	// Time after which the runner times out. Defaults to 1 hour
+	Timeout time.Duration
 }
 
 // Waiter encapsulates waiting for files to exist.
@@ -68,7 +75,7 @@ type Waiter interface {
 
 // Runner encapsulates running commands.
 type Runner interface {
-	Run(args ...string) error
+	Run(context context.Context, args ...string) error
 }
 
 // PostWriter encapsulates writing a file when complete.
@@ -85,6 +92,8 @@ func (e Entrypointer) Go() error {
 	defer func() {
 		_ = logger.Sync()
 	}()
+
+	e.setDefault()
 	output := []v1alpha1.PipelineResourceResult{}
 	for _, f := range e.WaitFiles {
 		if err := e.Waiter.Wait(f, e.WaitFileContent); err != nil {
@@ -103,7 +112,14 @@ func (e Entrypointer) Go() error {
 		Value: time.Now().Format(time.RFC3339),
 	})
 
-	err := e.Runner.Run(e.Args...)
+	ctx, cancelFunc := context.WithTimeout(context.Background(), e.Timeout)
+	defer func() {
+		if cancelFunc != nil {
+			cancelFunc()
+		}
+	}()
+	err := e.Runner.Run(ctx, e.Args...)
+	output = append(output, e.fmtErrOutPut(err)...)
 
 	// Write the post file *no matter what*
 	e.WritePostFile(e.PostFile, err)
@@ -119,6 +135,41 @@ func (e Entrypointer) Go() error {
 		logger.Fatalf("Error while writing message: %s", wErr)
 	}
 	return err
+}
+
+func (e Entrypointer) fmtErrOutPut(err error) []v1alpha1.PipelineResourceResult {
+	if err == nil {
+		return []v1alpha1.PipelineResourceResult{}
+	}
+
+	reason := err.Error()
+	message := err.Error()
+
+	if err == context.DeadlineExceeded {
+		reason = pod.ReasonStepTimedOut
+		message = fmt.Sprintf("timeout more than %s", e.Timeout)
+	}
+
+	// we could add more cases to fmt reason and message according error
+
+	return []v1alpha1.PipelineResourceResult{
+		{
+			Key:   "Reason",
+			Value: reason,
+		},
+		{
+			Key:   "Message",
+			Value: message,
+		},
+	}
+}
+
+func (e Entrypointer) setDefault() {
+	if e.Timeout.Seconds() == 0 {
+		e.Timeout = config.DefaultTimeoutMinutes * time.Minute
+	}
+
+	return
 }
 
 func (e Entrypointer) readResultsFromDisk() error {

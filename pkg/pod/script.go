@@ -50,7 +50,7 @@ var (
 // It does this by prepending a container that writes specified Script bodies
 // to executable files in a shared volumeMount, then produces Containers that
 // simply run those executable files.
-func convertScripts(shellImage string, steps []v1alpha1.Step, sidecars []v1alpha1.Sidecar) (*corev1.Container, []corev1.Container, []corev1.Container) {
+func convertScripts(shellImage string, steps []v1alpha1.Step, sidecars []v1alpha1.Sidecar) (placeScriptInitContainer *corev1.Container, convertedStepContainers []v1alpha1.Step, sidecarContainers []v1alpha1.Step) {
 	placeScripts := false
 	placeScriptsInit := corev1.Container{
 		Name:         "place-scripts",
@@ -61,8 +61,8 @@ func convertScripts(shellImage string, steps []v1alpha1.Step, sidecars []v1alpha
 		VolumeMounts: []corev1.VolumeMount{scriptsVolumeMount},
 	}
 
-	convertedStepContainers := convertListOfSteps(steps, &placeScriptsInit, &placeScripts, "script")
-	sidecarContainers := convertListOfSteps(sidecars, &placeScriptsInit, &placeScripts, "sidecar-script")
+	convertedStepContainers = convertListOfSteps(steps, &placeScriptsInit, &placeScripts, "script")
+	sidecarContainers = convertListOfSteps(sidecars, &placeScriptsInit, &placeScripts, "sidecar-script")
 
 	if placeScripts {
 		return &placeScriptsInit, convertedStepContainers, sidecarContainers
@@ -74,12 +74,12 @@ func convertScripts(shellImage string, steps []v1alpha1.Step, sidecars []v1alpha
 //
 // It iterates through the list of steps (or sidecars), generates the script file name and heredoc termination string,
 // adds an entry to the init container args, sets up the step container to run the script, and sets the volume mounts.
-func convertListOfSteps(steps []v1alpha1.Step, initContainer *corev1.Container, placeScripts *bool, namePrefix string) []corev1.Container {
-	containers := []corev1.Container{}
+func convertListOfSteps(steps []v1alpha1.Step, initContainer *corev1.Container, placeScripts *bool, namePrefix string) []v1alpha1.Step {
+	// containers := []corev1.Container{}
 	for i, s := range steps {
 		if s.Script == "" {
 			// Nothing to convert.
-			containers = append(containers, s.Container)
+			// containers = append(containers, s.Container)
 			continue
 		}
 
@@ -122,7 +122,7 @@ cat > ${tmpfile} << '%s'
 		// we'll clear out the Args and overwrite Command.
 		steps[i].Command = []string{tmpFile}
 		steps[i].VolumeMounts = append(steps[i].VolumeMounts, scriptsVolumeMount)
-		containers = append(containers, steps[i].Container)
+		// containers = append(containers, steps[i].Container)
 	}
-	return containers
+	return steps
 }

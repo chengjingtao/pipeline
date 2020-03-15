@@ -36,6 +36,7 @@ var (
 	postFile            = flag.String("post_file", "", "If specified, file to write upon completion")
 	terminationPath     = flag.String("termination_path", "/tekton/termination", "If specified, file to write upon termination")
 	results             = flag.String("results", "", "If specified, list of file names that might contain task results")
+	timeout             = flag.Duration("timeout", time.Hour, "time")
 	waitPollingInterval = time.Second
 )
 
@@ -53,6 +54,7 @@ func main() {
 		Runner:          &realRunner{},
 		PostWriter:      &realPostWriter{},
 		Results:         strings.Split(*results, ","),
+		Timeout:         *timeout,
 	}
 
 	// Copy any creds injected by creds-init into the $HOME directory of the current

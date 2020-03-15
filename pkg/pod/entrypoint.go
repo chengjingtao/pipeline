@@ -86,7 +86,7 @@ var (
 // method, using entrypoint_lookup.go.
 //
 // TODO(#1605): Also use entrypoint injection to order sidecar start/stop.
-func orderContainers(entrypointImage string, steps []corev1.Container, results []v1alpha1.TaskResult) (corev1.Container, []corev1.Container, error) {
+func orderContainers(entrypointImage string, steps []v1alpha1.Step, results []v1alpha1.TaskResult) (corev1.Container, []v1alpha1.Step, error) {
 	initContainer := corev1.Container{
 		Name:         "place-tools",
 		Image:        entrypointImage,
@@ -118,6 +118,9 @@ func orderContainers(entrypointImage string, steps []corev1.Container, results [
 				"-termination_path", terminationPath,
 			}
 		}
+		if s.Timeout != nil {
+			argsForEntrypoint = append(argsForEntrypoint, "-timeout", s.Timeout.Duration.String())
+		}
 		argsForEntrypoint = append(argsForEntrypoint, resultArgument(steps, results)...)
 
 		cmd, args := s.Command, s.Args
@@ -142,7 +145,7 @@ func orderContainers(entrypointImage string, steps []corev1.Container, results [
 	return initContainer, steps, nil
 }
 
-func resultArgument(steps []corev1.Container, results []v1alpha1.TaskResult) []string {
+func resultArgument(steps []v1alpha1.Step, results []v1alpha1.TaskResult) []string {
 	if len(results) == 0 {
 		return nil
 	}

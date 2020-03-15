@@ -3,6 +3,7 @@ package main
 import (
 	"os"
 	"os/exec"
+	"context"
 
 	"github.com/tektoncd/pipeline/pkg/entrypoint"
 )
@@ -15,15 +16,16 @@ type realRunner struct{}
 
 var _ entrypoint.Runner = (*realRunner)(nil)
 
-func (*realRunner) Run(args ...string) error {
+func (*realRunner) Run(context context.Context, args ...string) error {
 	if len(args) == 0 {
 		return nil
 	}
 	name, args := args[0], args[1:]
 
-	cmd := exec.Command(name, args...)
+	cmd := exec.CommandContext(context, name, args...)
 	cmd.Stdout = os.Stdout
 	cmd.Stderr = os.Stderr
+
 
 	if err := cmd.Run(); err != nil {
 		return err

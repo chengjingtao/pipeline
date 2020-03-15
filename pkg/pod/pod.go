@@ -219,12 +219,15 @@ func MakePod(images pipeline.Images, taskRun *v1alpha1.TaskRun, taskSpec v1alpha
 		return nil, err
 	}
 
-	mergedPodContainers := stepContainers
+	mergedPodContainers := []corev1.Container{}
+	for _, step := range stepContainers {
+		mergedPodContainers = append(mergedPodContainers, step.Container)
+	}
 
 	// Merge sidecar containers with step containers.
 	for _, sc := range sidecarContainers {
 		sc.Name = names.SimpleNameGenerator.RestrictLength(fmt.Sprintf("%v%v", sidecarPrefix, sc.Name))
-		mergedPodContainers = append(mergedPodContainers, sc)
+		mergedPodContainers = append(mergedPodContainers, sc.Container)
 	}
 
 	var dnsPolicy corev1.DNSPolicy

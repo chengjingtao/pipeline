@@ -21,7 +21,7 @@ import (
 
 	"github.com/google/go-containerregistry/pkg/name"
 	v1 "github.com/google/go-containerregistry/pkg/v1"
-	corev1 "k8s.io/api/core/v1"
+	"github.com/tektoncd/pipeline/pkg/apis/pipeline/v1alpha1"
 )
 
 // EntrypointCache looks up an image's entrypoint (command) in a container
@@ -41,7 +41,7 @@ type EntrypointCache interface {
 //
 // Images that are not specified by digest will be specified by digest after
 // lookup in the resulting list of containers.
-func resolveEntrypoints(cache EntrypointCache, namespace, serviceAccountName string, steps []corev1.Container) ([]corev1.Container, error) {
+func resolveEntrypoints(cache EntrypointCache, namespace, serviceAccountName string, steps []v1alpha1.Step) ([]v1alpha1.Step, error) {
 	// Keep a local cache of name->image lookups, just for the scope of
 	// resolving this set of steps. If the image is pushed to before the
 	// next run, we need to resolve its digest and entrypoint again, but we
